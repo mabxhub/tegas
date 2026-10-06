@@ -23,10 +23,10 @@ export function createLetterPdf({settings:s,student:m,record,records,level},font
    {text:`Nama murid: ${c.studentName}\nKelas: ${c.className}\nTarikh kejadian: ${c.date}\nTempat: ${c.location}\nKesalahan: ${c.detail}`},
    ...(c.notes?[{text:`Keterangan: ${c.notes}`}]:[])
   ]:[
-   {text:`Nama murid: ${c.studentName}\nID murid: ${c.studentId}\nJumlah kesalahan: ${cases.length}`,bold:true},
+   {text:`Nama murid: ${c.studentName}\nKelas: ${c.className}\nJumlah kesalahan: ${cases.length}`,bold:true},
    ...cases.flatMap((item,index)=>[
     {text:`Kes ${index+1} — ${item.detail} (TGS-${String(item.id).padStart(4,'0')})`,bold:true},
-    {text:`Tarikh: ${item.date}\nKelas: ${item.className}\nTempat: ${item.location}${item.notes?`\nKeterangan: ${item.notes}`:''}`}
+    {text:`Tarikh: ${item.date}\nTempat: ${item.location}${item.notes?`\nKeterangan: ${item.notes}`:''}`}
    ])
   ]),
   {text:`3. Pihak sekolah memberikan amaran ${level.toLowerCase()} dan memohon kerjasama tuan / puan untuk membimbing anak jagaan agar mematuhi peraturan sekolah. Sila hubungi pihak sekolah untuk perbincangan dan tindakan susulan.`},
