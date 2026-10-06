@@ -7,6 +7,7 @@ export async function downloadLetter(input){
  fontPromise??=Promise.all([fontBase64(regularUrl),fontBase64(boldUrl)]).catch(e=>{fontPromise=undefined;throw e;});
  const [normal,bold]=await fontPromise;
  const result=createLetterPdf(input,{normal,bold});
- result.doc.save(`TEGAS-Surat-Amaran-${input.level}-${String(input.record.id).padStart(4,'0')}.pdf`);
+ const suffix=input.records?.length>1?`Gabungan-${input.records.length}Kes-`:'';
+ result.doc.save(`TEGAS-Surat-Amaran-${input.level}-${suffix}${String(input.record.id).padStart(4,'0')}.pdf`);
  return result;
 }

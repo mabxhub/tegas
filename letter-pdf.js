@@ -1,6 +1,8 @@
+import {validateLetterCases} from './letter-cases.js';
 import {jsPDF} from 'jspdf';
 // A single vector-text A4 page. Measure every line before drawing; never truncate.
-export function createLetterPdf({settings:s,student:m,record:c,level},fonts){
+export function createLetterPdf({settings:s,student:m,record,records,level},fonts){
+ const cases=records?validateLetterCases(records):[record];const c=cases[0];
  const doc=new jsPDF({unit:'pt',format:'a4',orientation:'portrait',compress:true});
  for(const [style,font] of Object.entries(fonts)){doc.addFileToVFS(`tegas-${style}.ttf`,font);doc.addFont(`tegas-${style}.ttf`,'Tegas',style);}
  const pageWidth=doc.internal.pageSize.getWidth(),pageHeight=doc.internal.pageSize.getHeight();
@@ -17,8 +19,16 @@ export function createLetterPdf({settings:s,student:m,record:c,level},fonts){
   {text:`SURAT AMARAN ${level.toUpperCase()} — SALAH LAKU DISIPLIN`,bold:true},
   {text:'Dengan segala hormatnya perkara di atas dirujuk.'},
   {text:'2. Dimaklumkan bahawa murid berikut telah direkodkan melakukan salah laku disiplin:'},
-  {text:`Nama murid: ${c.studentName}\nKelas: ${c.className}\nTarikh kejadian: ${c.date}\nTempat: ${c.location}\nKesalahan: ${c.detail}`},
-  ...(c.notes?[{text:`Keterangan: ${c.notes}`}]:[]),
+  ...(cases.length===1?[
+   {text:`Nama murid: ${c.studentName}\nKelas: ${c.className}\nTarikh kejadian: ${c.date}\nTempat: ${c.location}\nKesalahan: ${c.detail}`},
+   ...(c.notes?[{text:`Keterangan: ${c.notes}`}]:[])
+  ]:[
+   {text:`Nama murid: ${c.studentName}\nID murid: ${c.studentId}\nJumlah kesalahan: ${cases.length}`,bold:true},
+   ...cases.flatMap((item,index)=>[
+    {text:`Kes ${index+1} — ${item.detail} (TGS-${String(item.id).padStart(4,'0')})`,bold:true},
+    {text:`Tarikh: ${item.date}\nKelas: ${item.className}\nTempat: ${item.location}${item.notes?`\nKeterangan: ${item.notes}`:''}`}
+   ])
+  ]),
   {text:`3. Pihak sekolah memberikan amaran ${level.toLowerCase()} dan memohon kerjasama tuan / puan untuk membimbing anak jagaan agar mematuhi peraturan sekolah. Sila hubungi pihak sekolah untuk perbincangan dan tindakan susulan.`},
   {text:'Sekian, terima kasih.'},
   {text:'“MALAYSIA MADANI”\n“BERKHIDMAT UNTUK NEGARA”'},

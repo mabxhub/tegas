@@ -58,3 +58,7 @@ Ujian PDF merangkumi surat pendek, keterangan panjang, teks tanpa ruang dan bany
 ## Logo sekolah
 
 Muat naik PNG/JPG/WebP maksimum 5 MB di **Tetapan sekolah → Logo sekolah**. Imej dikecilkan dengan nisbah asal dan disimpan automatik. Logo dipaparkan pada profil/header sistem, pratonton surat dan PDF satu halaman A4. Logo boleh dibuang melalui tetapan. Dalam demo Pages, logo disimpan bersama tetapan dalam pelayar sahaja. Import murid tidak menggantikan logo atau tetapan sekolah.
+
+## Surat gabungan beberapa kesalahan
+
+Halaman **Surat amaran** mengumpulkan kes mengikut ID murid. Klik **Jana surat** untuk memilih semua kes berstatus Bersalah bagi murid itu; nyahpilih kes tertentu jika perlu. Kes murid berlainan atau belum disahkan tidak boleh digabungkan. Pratonton dan PDF menyenaraikan setiap kes dengan rujukan, tarikh, kelas, tempat dan keterangan. Muat turun PDF gabungan sebagai satu halaman A4, dengan logo dan semua kandungan dipelihara; teks dikecilkan apabila kandungan banyak. Surat satu kes masih disokong melalui butiran laporan.
