@@ -1,3 +1,4 @@
+import {applyTeacherImport,parseTeacherRows,normalizeTeacherName} from './teacher-rows.js';
 import {applyStudentImport,normalizeStudent,normalizeClassName,preserveCaseStudents,validateLogo} from './school-data.js';
 import express from 'express';
 import session from 'express-session';
@@ -6,10 +7,11 @@ import {DatabaseSync} from 'node:sqlite';
 import {mkdirSync,readFileSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import {parseFile} from './imports.js';
+if(process.env.STORAGE_MODE==='drive'){await import('./saas-server.js');}else{
 const app=express();const port=Number(process.env.PORT||3000);const base=process.env.APP_URL||`http://localhost:${port}`;
 const demo=process.env.DEMO_MODE==='true' && process.env.NODE_ENV!=='production';
 mkdirSync(process.env.DATA_DIR||'data',{recursive:true});const db=new DatabaseSync(`${process.env.DATA_DIR||'data'}/tegas.sqlite`);
-db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS students (id TEXT PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cases (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);');
+db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS students (id TEXT PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cases (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS teachers(name TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);');
 const catalog=JSON.parse(readFileSync('src/catalog.json','utf8'));
 if(process.env.NODE_ENV==='production'&&!process.env.SESSION_SECRET) throw Error('SESSION_SECRET diperlukan dalam production.');
 app.set('trust proxy',1);app.use(express.json({limit:'2mb'}));app.use(session({secret:process.env.SESSION_SECRET||randomBytes(32).toString('hex'),resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'lax',secure:base.startsWith('https:'),maxAge:8*3600*1000}}));
@@ -34,10 +36,14 @@ app.use('/api',(req,res,next)=>{if(!req.session.user)return res.status(401).json
 app.post('/api/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
 const settings=()=>JSON.parse(db.prepare('SELECT payload FROM settings WHERE id=1').get()?.payload||'{"school":"SEKOLAH KEBANGSAAN PAYA REDAN","code":"JBA5054","address":"","signatory":"Guru Besar"}');
 const students=()=>db.prepare('SELECT payload FROM students').all().map(x=>normalizeStudent(JSON.parse(x.payload)));
+const teachers=()=>db.prepare('SELECT name FROM teachers ORDER BY name').all().map(r=>r.name);
 const cases=()=>db.prepare('SELECT id,payload FROM cases ORDER BY id DESC').all().map(x=>({...JSON.parse(x.payload),className:normalizeClassName(JSON.parse(x.payload).className),id:x.id}));
-app.get('/api/data',(req,res)=>res.json({students:students(),cases:cases(),settings:settings(),catalog}));
+app.get('/api/data',(req,res)=>res.json({students:students(),cases:cases(),teachers:teachers(),settings:settings(),catalog}));
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024,files:1}});
 app.post('/api/import/preview',upload.single('file'),async(req,res,next)=>{try{if(!req.file)throw Error('Pilih fail dahulu.');res.json(await parseFile(req.file.buffer,req.file.originalname));}catch(e){next(e);}});
+app.post('/api/teachers/preview',upload.single('file'),async(req,res,next)=>{try{if(!req.file)throw Error('Pilih fail dahulu.');res.json(await parseFile(req.file.buffer,req.file.originalname,parseTeacherRows));}catch(e){next(e);}});
+app.post('/api/teachers',(req,res,next)=>{try{const names=applyTeacherImport(teachers(),req.body.names,req.body.mode);db.exec('BEGIN');try{db.exec('DELETE FROM teachers');const put=db.prepare('INSERT INTO teachers VALUES(?)');for(const name of names)put.run(name);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}res.json({teachers:names});}catch(e){next(e);}});
+app.delete('/api/teachers',(req,res)=>{db.prepare('DELETE FROM teachers WHERE name=?').run(normalizeTeacherName(req.body.name));res.json({teachers:teachers()});});
 app.post('/api/import/sheets',async(req,res,next)=>{try{
  const u=new URL(req.body.url);if(u.protocol!=='https:'||u.hostname!=='docs.google.com')throw Error('Gunakan pautan Google Sheets yang sah.');
  const m=u.pathname.match(/^\/spreadsheets\/d\/([a-zA-Z0-9_-]+)(?:\/|$)/);if(!m)throw Error('Pautan Google Sheets tidak sah.');
@@ -56,9 +62,9 @@ app.post('/api/import/confirm',(req,res,next)=>{try{
  const {students:all,...summary}=result;res.json(summary);
  }catch(e){next(e);}});
 app.post('/api/cases',(req,res,next)=>{try{
- const b=req.body;const student=students().find(s=>s.id===b.studentId);const cat=catalog.find(c=>c.code===b.category);
+ const b=req.body;if(!teachers().includes(b.reporter))throw Error('Pilih nama pelapor daripada senarai guru.');const student=students().find(s=>s.id===b.studentId);const cat=catalog.find(c=>c.code===b.category);
  if(!student||!cat?.details.includes(b.detail)||!/^\d{4}-\d{2}-\d{2}$/.test(b.date)||!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(b.status)||!String(b.location||'').trim())throw Error('Lengkapkan maklumat kes yang sah.');
- const c={student,studentId:student.id,studentName:student.name,className:student.className,category:cat.code,categoryName:cat.name,detail:b.detail,date:b.date,location:String(b.location).slice(0,300),notes:String(b.notes||'').slice(0,5000),status:b.status,reporter:req.session.user.email,createdAt:new Date().toISOString()};
+ const c={student,studentId:student.id,studentName:student.name,className:student.className,category:cat.code,categoryName:cat.name,detail:b.detail,date:b.date,location:String(b.location).slice(0,300),notes:String(b.notes||'').slice(0,5000),status:b.status,reporter:b.reporter,createdAt:new Date().toISOString()};
  const result=db.prepare('INSERT INTO cases(payload) VALUES (?)').run(JSON.stringify(c));res.json({...c,id:Number(result.lastInsertRowid)});
  }catch(e){next(e);}});
 app.put('/api/cases/:id',(req,res)=>{
@@ -71,3 +77,5 @@ app.use('/api',(err,req,res,next)=>res.status(400).json({error:err.code==='LIMIT
 if(process.env.NODE_ENV==='production')app.use(express.static('dist'));
 else {const {createServer}=await import('vite');const vite=await createServer({server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}
 app.listen(port,'0.0.0.0',()=>console.log(`TEGAS berjalan pada port ${port}. Demo: ${demo}`));
+
+}

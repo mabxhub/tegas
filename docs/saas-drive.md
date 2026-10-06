@@ -1,55 +1,41 @@
-# TEGAS SaaS dengan storan Google Drive
+# TEGAS SaaS — Drive sekolah masing-masing
 
-Status: reka bentuk untuk pelaksanaan. Sambungan Drive dan pengasingan sekolah belum aktif. Demo GitHub Pages masih menggunakan localStorage.
+Backend Node dan wizard tersedia dalam kod. Sambungan Google dan hosting production belum diaktifkan. GitHub Pages menyediakan simulasi menggunakan storan pelayar, bukan Drive bersama.
 
-## Kontrak aplikasi
+## Aliran pengguna
 
-- Akaun Google mengenal pasti pengguna; sekolah ialah tenant. Keahlian sekolah dan peranan pentadbir/guru disahkan pada backend untuk setiap permintaan.
-- Identiti sekolah daripada sesi yang disahkan, bukan daripada folder ID atau school ID yang dihantar pelayar sahaja.
-- Setiap sekolah mempunyai data murid, kes, logo, tetapan, surat dan log perubahan berasingan. Guru sekolah yang sama berkongsi data; guru sekolah lain tidak mempunyai akses.
-- Kekalkan import sync/ganti, sejarah murid pada kes, normalisasi kelas dan PDF satu halaman A4.
-- Token Google dan kunci rahsia disimpan pada backend secara selamat. Fail rahsia tidak diterbitkan ke GitHub Pages atau bundle JavaScript.
+1. Admin mendaftar menggunakan Google email dan membenarkan `drive.file`.
+2. Wizard meminta kod unik sekolah, nama sekolah dan kod akses 4 angka.
+3. Backend mencipta folder `tegas(KODSEKOLAH)` dalam Drive admin dan fail `tegas-school-data.json`. Percubaan semula mencari folder/fail dengan pengenal sekolah sebelum mencipta.
+4. Admin mengimport murid melalui pratonton dan memilih sync atau ganti.
+5. Wizard memberikan URL `APP_URL/#/sekolah/KODSEKOLAH`.
+6. Semua guru masuk menggunakan URL dan satu kod akses bersama. Tiada akaun Google atau pengesanan identiti guru diperlukan.
+7. Tetapan mengurus nama guru: manual, Excel, CSV atau PDF berteks dengan lajur `NAMA GURU` / `NAMA`. Pelapor dipilih daripada senarai tersebut. Nama yang dipilih ialah maklumat laporan; ia tidak membuktikan identiti pengguna.
 
-## Keputusan storan yang diperlukan
+## Storan dan akses
 
-1. **Drive sekolah masing-masing:** pemilik sekolah memberi kebenaran OAuth untuk aplikasi menyediakan/mengakses fail sekolah. Keahlian guru dalam aplikasi tidak memerlukan semua guru memiliki token Drive pemilik. Penarikan kebenaran pemilik menghentikan akses storan sekolah itu.
-2. **Drive pusat pengendali SaaS:** backend mengurus folder berasingan untuk setiap sekolah, menggunakan identiti Google pengendali. Pelanggan hanya log masuk aplikasi. Pengendali menanggung kuota, pemilikan dan pengurusan data.
+Murid, kes, snapshot murid, logo, nama guru dan tetapan berada dalam fail JSON Drive sekolah. PDF dijana untuk dimuat turun; PDF tidak disimpan secara automatik ke Drive. Import ganti menghasilkan salinan backup fail Drive sebelum menulis data baharu.
 
-Keputusan ini menentukan identiti OAuth storan, aliran pendaftaran sekolah dan pemilikan data. Jangan menyambung demo kepada Drive secara awam sebelum pilihan dibuat dan akses sebenar diuji.
+Backend menyimpan daftar sekolah, pengikatan admin, hash kod akses, sesi dan refresh token terenkripsi dalam SQLite di `DATA_DIR`. Ini diperlukan supaya pengguna berkongsi kod tanpa perlu memiliki akses Google Drive. Token tidak dihantar ke frontend. PIN menggunakan salted scrypt; lima cubaan salah setiap klien atau 30 bagi sekolah dalam 15 minit disekat sementara. Sesi akses tamat selepas empat jam, dan penukaran kod oleh admin membatalkan akses lama.
 
-## Struktur storan cadangan
+Setiap permintaan data mesti mempunyai sesi yang membuka sekolah tersebut. Menukar kod sekolah sahaja tidak memberikan akses. Semua pengguna kod bersama boleh mengurus rekod, import, nama guru dan tetapan biasa. Hanya admin Google boleh mengurus pautan Drive dan menukar kod akses.
 
-Satu folder bagi setiap sekolah dengan pengenal dalaman unik; nama sekolah bukan kunci keselamatan.
+Penulisan menggunakan revision dan kunci SQLite per sekolah. Revision lapuk ditolak dengan 409. Kegagalan Drive tidak dilaporkan sebagai simpanan berjaya. Jalankan satu instance backend dengan cakera kekal; deployment berbilang mesin belum disokong. Jangan sunting JSON secara manual ketika aplikasi digunakan. Backup boleh dipulihkan secara pentadbiran; tiada UI pemulihan automatik.
 
-- `school.json`: profil, konfigurasi dan rujukan logo.
-- `students.json`: senarai murid, versi dan masa import terakhir.
-- `cases/`: fail kes beridentiti unik, termasuk snapshot murid dan status.
-- `assets/`: logo sekolah.
-- `letters/`: PDF yang dipilih untuk disimpan bersama rujukan kes.
-- `audit/`: rekod perubahan.
-- `backups/`: salinan sebelum import ganti dan perubahan besar.
+## Hosting sebenar
 
-Google Drive ialah storan fail, bukan pangkalan data transaksi. Backend mesti menyusun penulisan, mengesan versi lapuk dan mengendalikan kegagalan rangkaian supaya kemaskini serentak tidak memadam kerja guru lain. Pilih satu model backend yang menguatkuasakan penulisan ini; proses berbilang instance memerlukan penguncian bersama. Jangan mendakwa perubahan atomik pada beberapa fail Drive.
+Gunakan satu servis Node 24 dengan HTTPS dan cakera kekal untuk `DATA_DIR`. Servis yang sama menyediakan frontend dan API; bina frontend biasa menggunakan `npm run build`, bukan `build:pages`.
 
-## Hosting dan pengesahan
+Tetapkan melalui tetapan rahsia hosting:
 
-GitHub Pages boleh menjadi frontend. Endpoint backend memerlukan hosting berasingan dengan HTTPS, sesi yang sesuai untuk domain frontend/backend, sekatan origin/CSRF, dan storan token yang kekal. Google Apps Script atau servis Node ialah pilihan pelaksanaan; kesesuaian ditentukan selepas model Drive dan skala sekolah diketahui. Apps Script sahaja tidak menjadikan data multi-tenant secara automatik.
+- `STORAGE_MODE=drive`, `NODE_ENV=production`, `APP_URL=https://domain-backend-anda`
+- `DATA_DIR` pada cakera kekal
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `SESSION_SECRET` rawak dan kekal
+- `TOKEN_ENCRYPTION_KEY`: 32 bait rawak dalam base64, kekal merentas restart
 
-OAuth Google dan kebenaran Drive diperlukan untuk versi SaaS sebenar. Skop dipilih mengikut fail/folder yang aplikasi benar-benar perlu akses; jangan meminta akses seluruh Drive jika akses fail aplikasi mencukupi. Keperluan pengesahan aplikasi Google bergantung pada skop dan jenis pengguna. Uji keperluan akaun yang dipilih; jangan menganggap service account boleh memiliki fail dalam My Drive.
+Aktifkan Google Drive API, konfigurasi consent screen dan OAuth web client. Redirect URI mesti `APP_URL/auth/google/callback`. Akaun admin perlu dibenarkan sebagai test user jika aplikasi OAuth masih dalam testing. Google mungkin memerlukan penerbitan/pengesahan consent untuk pelanggan awam. Jangan letakkan rahsia dalam chat, repo atau Vite environment.
 
-## Migrasi demo
+Jalankan `npm ci`, `npm test`, `npm run build`, kemudian `npm start`. Reverse proxy hendaklah menetapkan IP klien dengan betul kerana had cubaan menggunakan IP. OAuth, penyediaan folder, perkongsian data antara peranti dan pemulihan backup mesti diuji dengan akaun Drive sebenar sebelum production. Ujian automatik menggunakan mock dan tidak mengesahkan konfigurasi Google sebenar.
 
-LocalStorage lama kekal sehingga pengguna memilih sekolah, menyemak eksport, dan mengesahkan import ke storan baharu. Tiada migrasi automatik data sebenar kepada Drive yang belum disahkan. Semak jumlah murid/kes, logo dan penjaga sebelum dan selepas migrasi. Simpan backup sebelum ganti.
-
-## Bukti yang diperlukan sebelum aktif
-
-- Dua sekolah menggunakan murid ber-ID sama tanpa data bercampur.
-- Guru tidak boleh membaca/mengubah folder atau kes sekolah lain walaupun menukar parameter permintaan.
-- Dua guru sekolah sama melihat data yang sama selepas refresh/peranti lain.
-- Import sync/ganti, logo, kes dan PDF berfungsi dengan storan Drive sebenar.
-- Penulisan serentak, token tamat tempoh/ditarik, kuota dan kegagalan separa tidak dilaporkan sebagai simpanan berjaya.
-- Backup dan pemulihan diuji; rahsia tidak muncul dalam bundle, repo atau log.
-
-## Prasyarat luar
-
-Pilihan pemilikan Drive, akaun Google dengan akses yang diperlukan, konfigurasi OAuth dan tempat hosting backend. Masukkan credential melalui tetapan hosting secara selamat, bukan chat. Bilangan sekolah/guru dan ciri langganan boleh diperincikan selepas aliran tenant dan storan asas ditentukan.
+Data localStorage demo tidak dipindahkan secara automatik. OAuth/admin sekolah tidak disediakan oleh GitHub Pages; URL demo pada peranti lain tidak berkongsi data atau pendaftaran sekolah.

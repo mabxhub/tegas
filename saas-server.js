@@ -1,0 +1,66 @@
+import {applyTeacherImport,parseTeacherRows,normalizeTeacherName} from './teacher-rows.js';
+import express from 'express';import session from 'express-session';import multer from 'multer';import {randomBytes,createHmac} from 'node:crypto';import {readFileSync} from 'node:fs';
+import {Registry,SqliteSessionStore} from './backend/registry.js';import {DriveStore,defaultSchoolData} from './backend/drive-store.js';import {parseFile} from './imports.js';import {applyStudentImport,normalizeStudent,preserveCaseStudents,validateLogo} from './school-data.js';
+export async function createSaasApp({config=process.env,registry:providedRegistry,drive:providedDrive,fetcher=fetch,serveFrontend=true}={}){
+const required=['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','SESSION_SECRET','TOKEN_ENCRYPTION_KEY','APP_URL'];for(const name of required)if(!config[name])throw Error(`${name} diperlukan untuk SaaS Drive.`);
+const base=config.APP_URL.replace(/\/$/,'');if(config.NODE_ENV==='production'&&!base.startsWith('https://'))throw Error('APP_URL production mesti HTTPS.');
+const registry=providedRegistry||new Registry(config.DATA_DIR||'data',config.TOKEN_ENCRYPTION_KEY);const drive=providedDrive||new DriveStore({registry,clientId:config.GOOGLE_CLIENT_ID,clientSecret:config.GOOGLE_CLIENT_SECRET,fetcher});const catalog=JSON.parse(readFileSync('src/catalog.json','utf8'));
+const app=express();app.set('trust proxy',1);app.use(express.json({limit:'2mb'}));app.use(session({store:new SqliteSessionStore(registry),secret:config.SESSION_SECRET,resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'lax',secure:base.startsWith('https:'),maxAge:8*3600000}}));
+const unlocked=(req,school)=>req.session.schoolAccess?.tenantId===school.id&&req.session.schoolAccess?.version===school.pin_version&&req.session.schoolAccess?.expires>Date.now();
+const schoolUrl=school=>`${base}/#/sekolah/${encodeURIComponent(school.code)}`;
+app.get('/api/auth',(req,res)=>{const code=String(req.headers['x-tegas-school']||'').toUpperCase();const owned=req.session.user?registry.schoolFor(req.session.user):null;const school=code?registry.schoolByCode(code):owned;const owner=school&&owned?.id===school.id;const hasAccess=school&&unlocked(req,school);const user=hasAccess?{name:'Akses sekolah',email:''}:owner?req.session.user:null;res.json({user,demo:false,configured:true,accessConfigured:true,saas:true,school:school?{code:school.code,name:school.name,role:owner?'admin':'school',ready:!!school.ready,pinRequired:!!school.ready&&!hasAccess,url:school.ready?schoolUrl(school):null}:null});});
+app.get('/auth/google',(req,res)=>{const code=String(req.query.school||'').toUpperCase();if(code&&!registry.byCode(code))return res.status(404).send('Sekolah belum didaftarkan.');const state=randomBytes(32).toString('hex');const drivePermission=!code||req.query.reconnect==='1';req.session.oauth={state,code,drivePermission};res.redirect('https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({client_id:config.GOOGLE_CLIENT_ID,redirect_uri:base+'/auth/google/callback',response_type:'code',scope:drivePermission?'openid email profile https://www.googleapis.com/auth/drive.file':'openid email profile',access_type:'offline',prompt:'consent',state}));});
+app.get('/auth/google/callback',async(req,res,next)=>{try{
+ const context=req.session.oauth;delete req.session.oauth;if(!context||context.state!==req.query.state||typeof req.query.code!=='string')return res.status(400).send('Pengesahan tidak sah. Cuba log masuk semula.');
+ const tokenResponse=await fetcher('https://oauth2.googleapis.com/token',{method:'POST',body:new URLSearchParams({code:req.query.code,client_id:config.GOOGLE_CLIENT_ID,client_secret:config.GOOGLE_CLIENT_SECRET,redirect_uri:base+'/auth/google/callback',grant_type:'authorization_code'}),signal:AbortSignal.timeout(15000)});const token=await tokenResponse.json();if(!tokenResponse.ok||!token.access_token)throw Error('Pengesahan Google gagal.');
+ const infoResponse=await fetcher('https://openidconnect.googleapis.com/v1/userinfo',{headers:{Authorization:`Bearer ${token.access_token}`},signal:AbortSignal.timeout(15000)});const info=await infoResponse.json();if(!infoResponse.ok||!info.sub||!info.email_verified)throw Error('Google email yang disahkan diperlukan.');
+ const user={sub:info.sub,email:info.email.toLowerCase(),name:info.name||info.email};let school=registry.schoolFor(user);
+ if(context.code&&(!school||school.code!==context.code))return res.status(403).send('Email ini bukan akaun pentadbir sekolah tersebut. Guru masuk melalui URL sekolah dan kod akses.');
+ school=school||registry.enroll(user);
+ if(school.owner_sub===user.sub&&school.role==='admin'&&context.drivePermission){
+  if(!(token.scope||'').split(' ').includes('https://www.googleapis.com/auth/drive.file'))throw Error('Kebenaran Drive diperlukan untuk menyediakan storan sekolah.');
+  if(token.refresh_token)registry.bindToken(school.id,token.refresh_token);else if(!school.encrypted_token)throw Error('Kebenaran Drive luar talian diperlukan. Log masuk semula dan benarkan akses.');drive.tokens.delete(school.id);
+ }
+ req.session.regenerate(error=>{if(error)return next(error);req.session.user=user;req.session.save(error=>error?next(error):res.redirect(school.ready?schoolUrl(school):base+'/'));});
+ }catch(error){next(error);}});
+app.post('/api/school/unlock',(req,res,next)=>{try{
+ if(req.headers.origin&&req.headers.origin!==base)return res.status(403).json({error:'Asal permintaan tidak sah.'});
+ const school=registry.schoolByCode(req.headers['x-tegas-school']);if(!school?.ready)return res.status(404).json({error:'URL sekolah tidak tersedia.'});
+ const client=createHmac('sha256',config.SESSION_SECRET).update(req.ip||'unknown').digest('hex');registry.verifyPin(school,client,req.body.pin);
+ req.session.schoolAccess={tenantId:school.id,version:school.pin_version,expires:Date.now()+4*3600000};res.json({ok:true});
+ }catch(e){next(e);}});
+app.use('/api',(req,res,next)=>{
+ const code=String(req.headers['x-tegas-school']||'').toUpperCase();const owned=req.session.user?registry.schoolFor(req.session.user):null;const school=code?registry.schoolByCode(code):owned;
+ if(!school)return res.status(401).json({error:'Masuk melalui URL sekolah dengan kod akses.'});
+ if(school.ready){if(code!==school.code)return res.status(403).json({error:'Masuk melalui URL sekolah anda.',schoolUrl:schoolUrl(school)});if(!unlocked(req,school)&&req.path!=='/logout')return res.status(423).json({error:'Masukkan kod akses sekolah dahulu.'});}
+ else if(!owned||owned.id!==school.id)return res.status(403).json({error:'Sekolah belum disediakan oleh pemilik.'});
+ if(req.method!=='GET'&&req.headers.origin&&req.headers.origin!==base)return res.status(403).json({error:'Asal permintaan tidak sah.'});
+ req.school={...school,role:owned?.id===school.id?'admin':'school'};next();
+});
+const admin=(req,res,next)=>req.school.role==='admin'&&req.school.owner_sub===req.session.user?.sub?next():res.status(403).json({error:'Tindakan ini hanya untuk pentadbir sekolah.'});
+const mutate=(req,fn,options)=>drive.mutate(req.school,req.headers['x-tegas-revision'],fn,options);
+
+app.put('/api/school/pin',admin,(req,res,next)=>{try{registry.setPin(req.school.id,req.body.pin);delete req.session.schoolAccess;res.json({ok:true});}catch(e){next(e);}});
+app.post('/api/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
+app.get('/api/data',async(req,res,next)=>{try{const data=req.school.file_id?await drive.read(req.school):defaultSchoolData();data.students=data.students.map(normalizeStudent);data.cases=preserveCaseStudents(data.cases,data.students);if(!req.school.file_id)data.settings={...data.settings,school:req.school.name==='Sekolah baharu'?'':req.school.name,code:req.school.code||''};res.json({...data,catalog,saas:true,role:req.school.role,schoolUrl:req.school.ready?schoolUrl(req.school):null});}catch(e){next(e);}});
+app.post('/api/onboarding/profile',admin,(req,res,next)=>{try{if(req.school.file_id)throw Error('Kod sekolah yang telah dipautkan tidak boleh ditukar.');const school=registry.setProfile(req.school.id,req.body.code,req.body.school,req.body.pin);res.json({code:school.code,school:school.name});}catch(e){next(e);}});
+app.post('/api/onboarding/provision',admin,async(req,res,next)=>{try{const school=await drive.provision(req.school);res.json({driveConnected:true,folderName:`tegas(${school.code})`,folderUrl:`https://drive.google.com/drive/folders/${school.folder_id}`});}catch(e){next(e);}});
+app.post('/api/onboarding/complete',admin,async(req,res,next)=>{try{const result=await mutate(req,data=>{if(!data.students.length||!data.settings.school||!data.settings.code)throw Error('Lengkapkan profil sekolah dan import data murid dahulu.');data.onboarding.completed=true;return {schoolUrl:schoolUrl(req.school)};});registry.setReady(req.school.id);res.json(result);}catch(e){next(e);}});
+
+const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024,files:1}});
+app.post('/api/import/preview',upload.single('file'),async(req,res,next)=>{try{if(!req.file)throw Error('Pilih fail dahulu.');res.json(await parseFile(req.file.buffer,req.file.originalname));}catch(e){next(e);}});
+app.post('/api/teachers/preview',upload.single('file'),async(req,res,next)=>{try{if(!req.file)throw Error('Pilih fail dahulu.');res.json(await parseFile(req.file.buffer,req.file.originalname,parseTeacherRows));}catch(e){next(e);}});
+app.post('/api/teachers',async(req,res,next)=>{try{res.json(await mutate(req,data=>{data.teachers=applyTeacherImport(data.teachers||[],req.body.names,req.body.mode);return {teachers:data.teachers};}));}catch(e){next(e);}});
+app.delete('/api/teachers',async(req,res,next)=>{try{res.json(await mutate(req,data=>{const name=normalizeTeacherName(req.body.name);data.teachers=(data.teachers||[]).filter(n=>n!==name);return {teachers:data.teachers};}));}catch(e){next(e);}});
+app.post('/api/import/sheets',(req,res)=>res.status(400).json({error:'Untuk helaian peribadi, eksport Excel/CSV daripada Google Sheets kemudian muat naik.'}));
+app.post('/api/import/confirm',async(req,res,next)=>{try{res.json(await mutate(req,data=>{const result=applyStudentImport(data.students,req.body.students,req.body.mode);data.cases=preserveCaseStudents(data.cases,data.students);data.students=result.students;const {students,...summary}=result;return summary;},{backup:req.body.mode==='replace'}));}catch(e){next(e);}});
+app.post('/api/cases',async(req,res,next)=>{try{res.json(await mutate(req,data=>{if(!data.onboarding.completed)throw Error('Lengkapkan setup sekolah dahulu.');const b=req.body,student=data.students.find(s=>s.id===b.studentId),cat=catalog.find(c=>c.code===b.category);if(!(data.teachers||[]).includes(b.reporter))throw Error('Pilih nama pelapor daripada senarai guru.');if(!student||!cat?.details.includes(b.detail)||!/^\d{4}-\d{2}-\d{2}$/.test(b.date)||!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(b.status)||!String(b.location||'').trim())throw Error('Lengkapkan maklumat kes yang sah.');const c={id:Math.max(0,...data.cases.map(c=>c.id))+1,student,studentId:student.id,studentName:student.name,className:student.className,category:cat.code,categoryName:cat.name,detail:b.detail,date:b.date,location:String(b.location).slice(0,300),notes:String(b.notes||'').slice(0,5000),status:b.status,reporter:b.reporter,createdAt:new Date().toISOString()};data.cases.unshift(c);return c;}));}catch(e){next(e);}});
+app.put('/api/cases/:id',async(req,res,next)=>{try{res.json(await mutate(req,data=>{const c=data.cases.find(c=>c.id===Number(req.params.id));if(!c)throw Error('Rekod tidak ditemui.');if(!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(req.body.status))throw Error('Status tidak sah.');Object.assign(c,{status:req.body.status,updatedAt:new Date().toISOString()});return c;}));}catch(e){next(e);}});
+app.put('/api/settings',async(req,res,next)=>{try{res.json(await mutate(req,data=>{if(req.body.code!==req.school.code)throw Error('Kod sekolah tidak boleh ditukar selepas folder dicipta.');const settings=Object.fromEntries(['school','code','address','signatory'].map(k=>[k,String(req.body[k]||'').slice(0,1000)]));if(!settings.school)throw Error('Nama sekolah diperlukan.');settings.logo=validateLogo(req.body.logo===undefined?data.settings.logo:req.body.logo);data.settings=settings;return settings;}));}catch(e){next(e);}});
+app.use('/api',(e,req,res,next)=>res.status(e.status||400).json({error:e.message||'Permintaan gagal.'}));
+app.use((e,req,res,next)=>res.status(400).send('Pautan Google gagal. '+e.message));
+if(serveFrontend){if(config.NODE_ENV==='production'){app.use(express.static('dist'));}else{const {createServer}=await import('vite');const vite=await createServer({server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}
+}
+return {app,registry,drive};
+}
+if(process.env.STORAGE_MODE==='drive'){const {app}=await createSaasApp();app.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('TEGAS SaaS Drive berjalan.'));}

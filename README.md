@@ -62,3 +62,7 @@ Muat naik PNG/JPG/WebP maksimum 5 MB di **Tetapan sekolah → Logo sekolah**. Im
 ## Surat gabungan beberapa kesalahan
 
 Halaman **Surat amaran** mengumpulkan kes mengikut ID murid. Klik **Jana surat** untuk memilih semua kes berstatus Bersalah bagi murid itu; nyahpilih kes tertentu jika perlu. Kes murid berlainan atau belum disahkan tidak boleh digabungkan. Pratonton dan PDF menyenaraikan setiap kes dengan rujukan, tarikh, tempat dan keterangan. Kelas dipaparkan sekali bersama maklumat murid, menggantikan medan ID murid dalam surat gabungan. Muat turun PDF gabungan sebagai satu halaman A4, dengan logo dan semua kandungan dipelihara; teks dikecilkan apabila kandungan banyak. Surat satu kes masih disokong melalui butiran laporan.
+
+### SaaS Drive dan akses sekolah
+
+Mod `STORAGE_MODE=drive` menyediakan pendaftaran admin Google, wizard kod/nama sekolah, folder Drive `tegas(KODSEKOLAH)`, import murid dan URL sekolah dengan kod akses bersama 4 angka. Guru tidak memerlukan akaun Google. Tetapan mengurus senarai nama pelapor secara manual atau melalui Excel/PDF/CSV. Lihat [konfigurasi SaaS Drive](docs/saas-drive.md) untuk hosting Node, OAuth dan storan kekal yang diperlukan. GitHub Pages hanya menjalankan simulasi wizard dalam pelayar; Drive sebenar memerlukan backend tersebut.
