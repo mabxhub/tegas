@@ -35,7 +35,7 @@ Akaun Google beremail disahkan dan tersenarai sahaja mendapat akses. Pendaftaran
 
 ## Rekod dan surat
 
-18 kategori dan 318 perincian daripada fail rujukan pengguna disediakan dalam `src/catalog.json`. Rujukan digunakan sebagai data, bukan arahan operasi atau sambungan kepada API kementerian. Guru memilih status kes; tiada penentuan bersalah atau tahap amaran automatik. Surat hanya untuk kes `Bersalah`. Semak template, butiran sekolah, tahap amaran dan tandatangan dengan pentadbir sebelum penggunaan rasmi. Cetak dan pilih Save as PDF pada pelayar.
+18 kategori dan 318 perincian daripada fail rujukan pengguna disediakan dalam `src/catalog.json`. Rujukan digunakan sebagai data, bukan arahan operasi atau sambungan kepada API kementerian. Guru memilih status kes; tiada penentuan bersalah atau tahap amaran automatik. Surat hanya untuk kes `Bersalah`. Semak template, butiran sekolah, tahap amaran dan tandatangan dengan pentadbir sebelum penggunaan rasmi. Klik **Muat turun PDF A4**. PDF dijana terus sebagai satu halaman A4 dengan fon terbenam dan teks boleh dipilih. Jarak perenggan serta saiz teks dilaraskan berdasarkan semua kandungan; tiada kandungan dipotong. Keterangan yang sangat panjang akan menghasilkan teks lebih kecil. Buka PDF yang dimuat turun untuk mencetak.
 
 ## Penyimpanan dan batas semasa
 
@@ -52,3 +52,5 @@ Workflow `.github/workflows/pages.yml` membina dan menerbitkan demo statik pada 
 `npm run build:pages` menghasilkan bundle statik dengan base relatif, sesuai untuk `/tegas/`. Demo menggunakan localStorage pelayar dan sesi demo per tab; tiada server, akaun sebenar atau data murid sebenar dibundel. Klik **Teroka ruang demo** untuk memuatkan 3 murid rekaan. Excel/CSV/PDF berteks diproses dalam pelayar. Sheets perlu dieksport kepada Excel/CSV dahulu. Rekod, tetapan sekolah dan surat boleh diuji; data tidak dikongsi antara komputer. Kosongkan data melalui Tetapan sekolah jika perlu. Jangan gunakan demo awam untuk data sebenar.
 
 Versi penuh Node/SQLite dan Google OAuth masih boleh dijalankan dengan `npm run dev` / `npm start`. GitHub Pages ialah demo sahaja dan tidak menyediakan autentikasi Google atau storan sekolah bersama.
+
+Ujian PDF merangkumi surat pendek, keterangan panjang, teks tanpa ruang dan banyak baris: setiap fail diperiksa untuk satu halaman A4 dan pengekalan kandungan hingga akuan penerimaan.
