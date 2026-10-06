@@ -1,3 +1,4 @@
+import {applyStudentImport,normalizeStudent,normalizeClassName,preserveCaseStudents,validateLogo} from './school-data.js';
 import express from 'express';
 import session from 'express-session';
 import multer from 'multer';
@@ -32,8 +33,8 @@ app.get('/auth/google/callback',async(req,res,next)=>{try{
 app.use('/api',(req,res,next)=>{if(!req.session.user)return res.status(401).json({error:'Sila log masuk.'});if(req.method!=='GET'&&req.headers.origin&&req.headers.origin!==base)return res.status(403).json({error:'Asal permintaan tidak sah.'});next();});
 app.post('/api/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
 const settings=()=>JSON.parse(db.prepare('SELECT payload FROM settings WHERE id=1').get()?.payload||'{"school":"SEKOLAH KEBANGSAAN PAYA REDAN","code":"JBA5054","address":"","signatory":"Guru Besar"}');
-const students=()=>db.prepare('SELECT payload FROM students').all().map(x=>JSON.parse(x.payload));
-const cases=()=>db.prepare('SELECT id,payload FROM cases ORDER BY id DESC').all().map(x=>({...JSON.parse(x.payload),id:x.id}));
+const students=()=>db.prepare('SELECT payload FROM students').all().map(x=>normalizeStudent(JSON.parse(x.payload)));
+const cases=()=>db.prepare('SELECT id,payload FROM cases ORDER BY id DESC').all().map(x=>({...JSON.parse(x.payload),className:normalizeClassName(JSON.parse(x.payload).className),id:x.id}));
 app.get('/api/data',(req,res)=>res.json({students:students(),cases:cases(),settings:settings(),catalog}));
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024,files:1}});
 app.post('/api/import/preview',upload.single('file'),async(req,res,next)=>{try{if(!req.file)throw Error('Pilih fail dahulu.');res.json(await parseFile(req.file.buffer,req.file.originalname));}catch(e){next(e);}});
@@ -46,15 +47,18 @@ app.post('/api/import/sheets',async(req,res,next)=>{try{
  const buf=Buffer.from(await response.arrayBuffer());if(buf.length>10*1024*1024)throw Error('Fail melebihi 10 MB.');res.json(await parseFile(buf,'sheet.csv'));
  }catch(e){next(e);}});
 app.post('/api/import/confirm',(req,res,next)=>{try{
- const rows=req.body.students;if(!Array.isArray(rows)||!rows.length||rows.length>10000)throw Error('Senarai murid tidak sah.');
- const fields=['id','name','identity','className','year','guardian','phone','address'];
- const clean=rows.map(s=>{if(!s.id||!s.name)throw Error('ID dan nama diperlukan.');return Object.fromEntries(fields.map(k=>[k,String(s[k]||'').slice(0,1000)]));});
- db.exec('BEGIN');try{const put=db.prepare('INSERT INTO students VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload');for(const s of clean)put.run(s.id,JSON.stringify(s));db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}res.json({count:clean.length});
+ const current=students();const result=applyStudentImport(current,req.body.students,req.body.mode);
+ const history=preserveCaseStudents(cases(),current);
+ db.exec('BEGIN');try{
+  for(const c of history){const {id,...payload}=c;db.prepare('UPDATE cases SET payload=? WHERE id=?').run(JSON.stringify(payload),id);}
+  db.exec('DELETE FROM students');const put=db.prepare('INSERT INTO students VALUES (?,?)');for(const student of result.students)put.run(student.id,JSON.stringify(student));db.exec('COMMIT');
+ }catch(e){db.exec('ROLLBACK');throw e;}
+ const {students:all,...summary}=result;res.json(summary);
  }catch(e){next(e);}});
 app.post('/api/cases',(req,res,next)=>{try{
  const b=req.body;const student=students().find(s=>s.id===b.studentId);const cat=catalog.find(c=>c.code===b.category);
  if(!student||!cat?.details.includes(b.detail)||!/^\d{4}-\d{2}-\d{2}$/.test(b.date)||!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(b.status)||!String(b.location||'').trim())throw Error('Lengkapkan maklumat kes yang sah.');
- const c={studentId:student.id,studentName:student.name,className:student.className,category:cat.code,categoryName:cat.name,detail:b.detail,date:b.date,location:String(b.location).slice(0,300),notes:String(b.notes||'').slice(0,5000),status:b.status,reporter:req.session.user.email,createdAt:new Date().toISOString()};
+ const c={student,studentId:student.id,studentName:student.name,className:student.className,category:cat.code,categoryName:cat.name,detail:b.detail,date:b.date,location:String(b.location).slice(0,300),notes:String(b.notes||'').slice(0,5000),status:b.status,reporter:req.session.user.email,createdAt:new Date().toISOString()};
  const result=db.prepare('INSERT INTO cases(payload) VALUES (?)').run(JSON.stringify(c));res.json({...c,id:Number(result.lastInsertRowid)});
  }catch(e){next(e);}});
 app.put('/api/cases/:id',(req,res)=>{
@@ -62,7 +66,7 @@ app.put('/api/cases/:id',(req,res)=>{
  if(!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(req.body.status))return res.status(400).json({error:'Status tidak sah.'});
  const c={...JSON.parse(row.payload),status:req.body.status,updatedBy:req.session.user.email,updatedAt:new Date().toISOString()};db.prepare('UPDATE cases SET payload=? WHERE id=?').run(JSON.stringify(c),req.params.id);res.json({...c,id:Number(req.params.id)});
 });
-app.put('/api/settings',(req,res)=>{const s=Object.fromEntries(['school','code','address','signatory'].map(k=>[k,String(req.body[k]||'').slice(0,1000)]));if(!s.school)return res.status(400).json({error:'Nama sekolah diperlukan.'});db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(s));res.json(s);});
+app.put('/api/settings',(req,res,next)=>{try{const s=Object.fromEntries(['school','code','address','signatory'].map(k=>[k,String(req.body[k]||'').slice(0,1000)]));s.logo=validateLogo(req.body.logo===undefined?settings().logo:req.body.logo);if(!s.school)throw Error('Nama sekolah diperlukan.');db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(s));res.json(s);}catch(e){next(e);}});
 app.use('/api',(err,req,res,next)=>res.status(400).json({error:err.code==='LIMIT_FILE_SIZE'?'Fail maksimum 10 MB.':err.message||'Permintaan gagal.'}));
 if(process.env.NODE_ENV==='production')app.use(express.static('dist'));
 else {const {createServer}=await import('vite');const vite=await createServer({server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}

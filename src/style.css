@@ -13,3 +13,13 @@
  .nav-mobile-label{display:block}
  .app>main{margin-left:0;width:100%;padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))}
 }
+.school-logo{width:28px;height:28px;object-fit:contain}
+.header-school-logo{width:34px;height:34px;object-fit:contain;flex-shrink:0}
+.letter-school-logo{width:64px;height:64px;object-fit:contain;flex-shrink:0}
+.logo-settings{display:flex;align-items:center;gap:20px;padding:20px 0;border-bottom:1px solid #e5ece6;margin-bottom:22px}
+.logo-preview{width:100px;height:100px;flex-shrink:0;border:1px solid #e0e8e1;border-radius:12px;display:grid;place-items:center;color:#8da292;background:#fafcf9;padding:10px}
+.logo-preview img{max-width:100%;max-height:100%;object-fit:contain}
+.logo-settings>div:last-child{min-width:0}.logo-settings input{max-width:100%}.logo-settings small{font-size:10px;line-height:1.6}.logo-settings .text-button{margin-top:12px}
+.import-options{border:0;padding:0;margin:20px 0}.import-options legend{font-size:12px;color:#506955;font-weight:600;margin-bottom:12px}
+.import-options label{display:flex;align-items:flex-start;gap:12px;border:1px solid #e0e8e1;border-radius:8px;padding:14px;cursor:pointer}.import-options label.chosen{border-color:#6d9c78;background:#f3f8f2}.import-options input,.replace-confirm input{width:16px;height:16px;margin:2px 0 0;flex-shrink:0;accent-color:#24684c}.import-options b{font-size:12px}.import-options small{margin-top:5px;line-height:1.6}.replace-confirm{display:flex;gap:10px;background:#fff7e9;padding:13px;border-radius:6px;line-height:1.7;color:#967336;font-size:11px}
+@media screen and (max-width:800px){.logo-settings{gap:12px;align-items:flex-start}.logo-preview{width:72px;height:72px}.header-school-logo{width:28px;height:28px}header>div:first-child>span{display:none}}

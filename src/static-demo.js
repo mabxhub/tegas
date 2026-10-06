@@ -1,8 +1,9 @@
+import {applyStudentImport,normalizeStudent,preserveCaseStudents,validateLogo} from '../school-data.js';
 import catalog from './catalog.json';
 import {parseRows} from '../student-rows.js';
 const KEY='tegas-pages-demo-v1';
 const defaults=()=>({students:[],cases:[],settings:{school:'SEKOLAH CONTOH — DEMO TEGAS',code:'DEMO',address:'Alamat sekolah rekaan',signatory:'Guru Besar (Demo)'}});
-const read=()=>{const saved=localStorage.getItem(KEY);if(!saved)return defaults();try{return JSON.parse(saved);}catch{throw Error('Data demo pelayar rosak. Padam storan laman ini untuk mula semula.');}};
+const read=()=>{const saved=localStorage.getItem(KEY);if(!saved)return defaults();try{const data=JSON.parse(saved);data.students=data.students.map(normalizeStudent);data.cases=preserveCaseStudents(data.cases,data.students);return data;}catch{throw Error('Data demo pelayar rosak. Padam storan laman ini untuk mula semula.');}};
 const write=data=>{try{localStorage.setItem(KEY,JSON.stringify(data));}catch{throw Error('Storan pelayar penuh / tidak tersedia. Data tidak disimpan.');}};
 const user={name:'Guru Demo',email:'demo@example.test'};
 async function importFile(file){
@@ -40,17 +41,16 @@ export async function demoApi(path,body,method){
  if(path==='import/preview')return importFile(body.get('file'));
  if(path==='import/sheets')throw Error('Dalam demo Pages, muat turun Google Sheets sebagai Excel/CSV kemudian upload.');
  if(path==='import/confirm'){
-  if(!Array.isArray(body.students)||!body.students.length||body.students.some(s=>!s.id||!s.name))throw Error('Senarai murid tidak sah.');
-  const byId=new Map(data.students.map(s=>[s.id,s]));body.students.forEach(s=>byId.set(s.id,s));data.students=[...byId.values()];write(data);return {count:body.students.length};
+  const result=applyStudentImport(data.students,body.students,body.mode);data.cases=preserveCaseStudents(data.cases,data.students);data.students=result.students;write(data);const {students,...summary}=result;return summary;
  }
  if(path==='cases'){
   const s=data.students.find(s=>s.id===body.studentId),cat=catalog.find(c=>c.code===body.category);
   if(!s||!cat?.details.includes(body.detail)||!body.date||!body.location?.trim())throw Error('Lengkapkan maklumat kes.');
-  const c={...body,id:Math.max(0,...data.cases.map(c=>c.id))+1,studentName:s.name,className:s.className,categoryName:cat.name,reporter:user.email,createdAt:new Date().toISOString()};data.cases.unshift(c);write(data);return c;
+  const c={...body,student:s,id:Math.max(0,...data.cases.map(c=>c.id))+1,studentName:s.name,className:s.className,categoryName:cat.name,reporter:user.email,createdAt:new Date().toISOString()};data.cases.unshift(c);write(data);return c;
  }
  if(path.startsWith('cases/')&&method==='PUT'){
   const c=data.cases.find(c=>c.id===Number(path.split('/')[1]));if(!c)throw Error('Rekod tidak ditemui.');if(!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(body.status))throw Error('Status tidak sah.');c.status=body.status;c.updatedAt=new Date().toISOString();write(data);return c;
  }
- if(path==='settings'&&method==='PUT'){if(!body.school?.trim())throw Error('Nama sekolah diperlukan.');data.settings=body;write(data);return body;}
+ if(path==='settings'&&method==='PUT'){if(!body.school?.trim())throw Error('Nama sekolah diperlukan.');data.settings={...body,logo:validateLogo(body.logo)};write(data);return data.settings;}
  throw Error('Operasi demo tidak disokong.');
 }

@@ -31,7 +31,7 @@ Akaun Google beremail disahkan dan tersenarai sahaja mendapat akses. Pendaftaran
 - Medan diperlukan: `NAMA` dan `ID MURID` atau `NO. PENGENALAN`. Padanan tambahan: `NAMA KELAS`, `TAHUN / TINGKATAN`, `PENJAGA 1`, `NO. TEL. BIMBIT PENJAGA 1`, `ALAMAT 1–3`, `POSKOD`, `BANDAR`, `NEGERI`.
 - Google Sheets: pautan helaian yang boleh dibaca tanpa autentikasi. Untuk helaian peribadi, download Excel/CSV daripada Sheets dan upload. Jangan jadikan data murid awam semata-mata untuk import.
 - PDF: jadual dengan teks dan pemisah tab, `|` atau beberapa ruang. PDF imbasan / susun atur yang tidak dapat dipadankan memerlukan OCR atau eksport Excel. Ralat dipaparkan jika header / murid tidak dapat dikenal pasti.
-- Had 10 MB; pratonton dan pengesahan diperlukan. ID sedia ada dikemaskini; rekod disiplin kekal. Data kewangan / kesihatan dalam eksport asal tidak diimport.
+- Had 10 MB; pratonton dan pengesahan diperlukan. Guru mesti memilih **Sync** (kemaskini ID sepadan, tambah baharu, kekalkan murid lain) atau **Ganti semua data murid** (senarai diganti dengan fail baharu sahaja, selepas pengesahan tambahan). Rekod disiplin dan butiran murid pada kes lama dikekalkan dalam kedua-dua mod. Nama kelas seperti `TAHUN SATU BIJAK` / `TAHUN 1 BIJAK` ditukar kepada `1 BIJAK`; kelas `BIJAK` digabung dengan medan tahun jika tersedia. Data kewangan / kesihatan dalam eksport asal tidak diimport.
 
 ## Rekod dan surat
 
@@ -54,3 +54,7 @@ Workflow `.github/workflows/pages.yml` membina dan menerbitkan demo statik pada 
 Versi penuh Node/SQLite dan Google OAuth masih boleh dijalankan dengan `npm run dev` / `npm start`. GitHub Pages ialah demo sahaja dan tidak menyediakan autentikasi Google atau storan sekolah bersama.
 
 Ujian PDF merangkumi surat pendek, keterangan panjang, teks tanpa ruang dan banyak baris: setiap fail diperiksa untuk satu halaman A4 dan pengekalan kandungan hingga akuan penerimaan.
+
+## Logo sekolah
+
+Muat naik PNG/JPG/WebP maksimum 5 MB di **Tetapan sekolah → Logo sekolah**. Imej dikecilkan dengan nisbah asal dan disimpan automatik. Logo dipaparkan pada profil/header sistem, pratonton surat dan PDF satu halaman A4. Logo boleh dibuang melalui tetapan. Dalam demo Pages, logo disimpan bersama tetapan dalam pelayar sahaja. Import murid tidak menggantikan logo atau tetapan sekolah.
