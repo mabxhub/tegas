@@ -19,6 +19,11 @@ test('authenticated API persists imports, validates cases and supports reviewed 
   assert.equal((await request('import/confirm',{students:replacement,mode:'replace'})).data.removed,1);
   const replaced=(await request('data')).data;assert.equal(replaced.students.length,1);assert.equal(replaced.students[0].className,'1 BIJAK');assert.equal(replaced.cases.length,1);assert.equal(replaced.cases[0].student.name,'MURID REKAAN');
   assert.equal((await request('settings',{school:'SEKOLAH CONTOH',logo:'data:image/svg+xml;base64,AAAA'},'PUT')).status,400);
+  assert.equal((await request(`cases/${c.data.id}`,{},'DELETE')).status,409);
+  await request(`cases/${c.data.id}`,{status:'Digugurkan'},'PUT');
+  assert.equal((await request(`cases/${c.data.id}`,{},'DELETE')).status,200);
+  assert.equal((await request(`cases/${c.data.id}`,{},'DELETE')).status,404);
+  const afterDelete=(await request('data')).data;assert.equal(afterDelete.cases.length,0);assert.equal(afterDelete.students.length,1);
   await request('logout',{});assert.equal((await request('data')).status,401);
  }finally {server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));rmSync(dir,{recursive:true,force:true});}
 });

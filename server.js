@@ -72,6 +72,11 @@ app.put('/api/cases/:id',(req,res)=>{
  if(!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(req.body.status))return res.status(400).json({error:'Status tidak sah.'});
  const c={...JSON.parse(row.payload),status:req.body.status,updatedBy:req.session.user.email,updatedAt:new Date().toISOString()};db.prepare('UPDATE cases SET payload=? WHERE id=?').run(JSON.stringify(c),req.params.id);res.json({...c,id:Number(req.params.id)});
 });
+app.delete('/api/cases/:id',(req,res)=>{
+ const row=db.prepare('SELECT payload FROM cases WHERE id=?').get(req.params.id);if(!row)return res.status(404).json({error:'Rekod tidak ditemui.'});
+ if(JSON.parse(row.payload).status!=='Digugurkan')return res.status(409).json({error:'Hanya laporan berstatus Digugurkan boleh dipadam.'});
+ db.prepare('DELETE FROM cases WHERE id=?').run(req.params.id);res.json({ok:true});
+});
 app.put('/api/settings',(req,res,next)=>{try{const s=Object.fromEntries(['school','code','address','signatory'].map(k=>[k,String(req.body[k]||'').slice(0,1000)]));s.logo=validateLogo(req.body.logo===undefined?settings().logo:req.body.logo);if(!s.school)throw Error('Nama sekolah diperlukan.');db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(s));res.json(s);}catch(e){next(e);}});
 app.use('/api',(err,req,res,next)=>res.status(400).json({error:err.code==='LIMIT_FILE_SIZE'?'Fail maksimum 10 MB.':err.message||'Permintaan gagal.'}));
 if(process.env.NODE_ENV==='production')app.use(express.static('dist'));

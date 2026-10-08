@@ -67,6 +67,9 @@ export async function demoApi(path,body,method){
  if(path.startsWith('cases/')&&method==='PUT'){
   const c=data.cases.find(c=>c.id===Number(path.split('/')[1]));if(!c)throw Error('Rekod tidak ditemui.');if(!['Baharu dilaporkan','Dalam siasatan','Bersalah','Digugurkan'].includes(body.status))throw Error('Status tidak sah.');c.status=body.status;c.updatedAt=new Date().toISOString();write(data);return c;
  }
+ if(path.startsWith('cases/')&&method==='DELETE'){
+  const c=data.cases.find(c=>c.id===Number(path.split('/')[1]));if(!c)throw Error('Rekod tidak ditemui.');if(c.status!=='Digugurkan')throw Error('Hanya laporan berstatus Digugurkan boleh dipadam.');data.cases=data.cases.filter(item=>item.id!==c.id);write(data);return {ok:true};
+ }
  if(path==='settings'&&method==='PUT'){if(data.onboarding.schoolUrl&&body.code!==data.settings.code)throw Error('Kod sekolah tidak boleh ditukar selepas setup.');if(!body.school?.trim())throw Error('Nama sekolah diperlukan.');data.settings={...body,logo:validateLogo(body.logo)};write(data);return data.settings;}
  throw Error('Operasi demo tidak disokong.');
 }
