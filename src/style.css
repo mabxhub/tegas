@@ -37,3 +37,5 @@
 @media(max-width:600px){.teacher-add{flex-wrap:wrap}.teacher-add label{flex-basis:100%}.access-shell{margin-top:10px}}
 
 .case-row{cursor:pointer}.case-row:hover{background:#f3f8f5}.case-row:focus-visible{outline:2px solid #267c62;outline-offset:-2px}
+
+.student-picker{margin-bottom:18px}.student-picker>label{margin-bottom:8px}.student-results{max-height:240px;overflow-y:auto;border:1px solid #dce6df;border-radius:8px;margin-top:6px;background:#fff}.student-results button{display:block;width:100%;text-align:left;padding:12px 14px;background:#fff;color:#263b35;border-bottom:1px solid #edf1ee;white-space:normal}.student-results button.highlight,.student-results button:hover{background:#edf6f0}.student-results small{margin-top:4px}.student-results p{padding:12px;color:#84918c;font-size:12px}.student-selected{margin-top:7px}
